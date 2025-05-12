@@ -6,6 +6,7 @@ from proj_interfaces.srv import MoveToTurtle
 from proj_interfaces.srv import EatTurtle
 from geometry_msgs.msg import Twist
 from turtlesim.msg import Pose
+from proj_interfaces.msg import MasterTurtlePose
 
 class MasterTurtleController(Node):
     def __init__(self):
@@ -13,7 +14,9 @@ class MasterTurtleController(Node):
         self.master_turtle_pose = Pose()
         self.next_turtle = EatTurtle.Request()
         self.next_turtle_pose = None
+        self.declare_parameter("distance_threshold", 0.2)
 
+        self.master_turtle_pose_publisher = self.create_publisher(MasterTurtlePose, "master_turtle_pose", 10)
         self.create_service(MoveToTurtle, "move_to_turtle", self.move_to_turtle_callback)
         self.cmd_pub = self.create_publisher(Twist, "turtle1/cmd_vel", 10)
         self.eat_turtle = self.create_client(EatTurtle, "eat_turtle")
@@ -35,8 +38,9 @@ class MasterTurtleController(Node):
         cmd.angular.z = 0.0
         distXY = next_turtle_poseXY[0] - master_turtle_poseXYTheta[0], next_turtle_poseXY[1] - master_turtle_poseXYTheta[1]
         distance_from_turtle = math.sqrt(distXY[0]**2 + distXY[1]**2)
+        distance_threshold = self.get_parameter("distance_threshold").value
 
-        if distance_from_turtle > 0.5:
+        if distance_from_turtle > distance_threshold:
             cmd.linear.x = distance_from_turtle*2
 
             theta_from_turtle = math.atan2(distXY[1], distXY[0])
@@ -49,6 +53,10 @@ class MasterTurtleController(Node):
             cmd.angular.z = theta_diff*6
         else:
             self.eat_turtle.call_async(self.next_turtle)
+            master_turtle_pose = MasterTurtlePose()
+            master_turtle_pose.x = master_turtle_poseXYTheta[0]
+            master_turtle_pose.y = master_turtle_poseXYTheta[1]
+            self.master_turtle_pose_publisher.publish(master_turtle_pose)
             self.destroy_timer(self.control_loop_timer)
 
         self.cmd_pub.publish(cmd)
